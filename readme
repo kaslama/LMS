@@ -1,0 +1,33 @@
+# MERN Learning Management System (LMS)
+
+A complete, functional Learning Management System built from scratch using the MERN stack (MongoDB, Express, React, Node.js). 
+
+## 🚀 Features
+
+*   **Role-Based Access Control:** Secure routes and APIs for Students, Instructors, and Admins.
+*   **Instructor Dashboard:** Create courses, manage sections and lessons, save as drafts, and publish.
+*   **Course Discovery:** Public course catalog with category filtering and search functionality.
+*   **Mock Payment & Enrollment:** Complete checkout flow utilizing a simulated mock payment system that creates verified enrollments upon success.
+*   **Student Learning Dashboard:** Track purchased courses, view progress, and access the Course Player.
+*   **Course Player:** Watch video lessons, read descriptions, and track individual lesson completions.
+*   **Progress Tracking:** Dynamic progress bars based on completed lessons. Automatically marks course as complete when 100% is reached.
+*   **Admin Tools:** Monitor platform statistics, recent mock transactions, and forcibly manage inappropriate courses.
+
+## 🛠 Tech Stack
+
+*   **Frontend:** React (Vite), Tailwind CSS, React Router DOM, Axios, React Hot Toast, Lucide React (Icons).
+*   **Backend:** Node.js, Express.js, MongoDB (Mongoose), JWT (JSON Web Tokens), bcryptjs.
+
+---
+
+## ⚙️ SETUP STEPS
+
+### 1. Database Setup
+Ensure you have MongoDB running locally on `mongodb://127.0.0.1:27017` or use a MongoDB Atlas cluster URI.
+
+### 2. Backend Setup
+Open a terminal and run the following commands:
+```bash
+cd server
+npm install
+npm run seed
