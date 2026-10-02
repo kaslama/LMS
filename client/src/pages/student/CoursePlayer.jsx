@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-// FIX: Added 'Award' to the lucide-react imports
 import { Menu, X, ArrowLeft, CheckCircle, Circle, PlayCircle, Award } from 'lucide-react';
 import api from '../../services/api';
 import Spinner from '../../components/ui/Spinner';
@@ -16,11 +15,42 @@ const CoursePlayer = () => {
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [completing, setCompleting] = useState(false);
+  
+  // --- QUIZ STATE ---
+  const [quizPassed, setQuizPassed] = useState(false);
+  const [quizData, setQuizData] = useState(null);
+  const [quizAnswers, setQuizAnswers] = useState([]); // Array of { questionId, selectedOptionId }
+  const [quizResult, setQuizResult] = useState(null);
+  const [isSubmittingQuiz, setIsSubmittingQuiz] = useState(false);
+  const [loadingQuiz, setLoadingQuiz] = useState(false);
+
+  // Reset quiz state whenever the active lesson changes
+  useEffect(() => {
+    setQuizPassed(false);
+    setQuizData(null);
+    setQuizAnswers([]);
+    setQuizResult(null);
+
+    // If the new lesson is a quiz, fetch its data
+    if (activeLesson?.type === 'quiz') {
+      const fetchQuiz = async () => {
+        setLoadingQuiz(true);
+        try {
+          const { data } = await api.get(`/quizzes/lesson/${activeLesson._id}`);
+          setQuizData(data);
+        } catch (error) {
+          toast.error("Could not load quiz data.");
+        } finally {
+          setLoadingQuiz(false);
+        }
+      };
+      fetchQuiz();
+    }
+  }, [activeLesson]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch both Course structure and User's Enrollment data
         const [courseRes, enrollRes] = await Promise.all([
           api.get(`/courses/${courseId}`),
           api.get(`/enrollments/check/${courseId}`)
@@ -35,7 +65,6 @@ const CoursePlayer = () => {
         setCourse(courseRes.data);
         setEnrollment(enrollRes.data.enrollment);
 
-        // Find the first uncompleted lesson, or default to very first lesson
         const sections = courseRes.data.sections;
         let startLesson = null;
         
@@ -51,7 +80,6 @@ const CoursePlayer = () => {
             if (startLesson) break;
           }
           
-          // FIX: Stronger fallback. If all completed, find the very first available lesson safely
           if (!startLesson) {
             for (let section of sections) {
               if (section.lessons && section.lessons.length > 0) {
@@ -83,7 +111,6 @@ const CoursePlayer = () => {
         lessonId: activeLesson._id
       });
       
-      // Update local enrollment state
       setEnrollment({
         ...enrollment,
         progress: data.progress,
@@ -97,7 +124,6 @@ const CoursePlayer = () => {
         toast.success("Lesson completed!");
       }
       
-      // Try to navigate to next lesson automatically
       let foundCurrent = false;
       let nextLesson = null;
       for (let section of course.sections) {
@@ -126,6 +152,46 @@ const CoursePlayer = () => {
 
   const isCompleted = (lessonId) => {
     return enrollment?.completedLessons?.includes(lessonId);
+  };
+
+  // --- QUIZ HANDLERS ---
+  const handleOptionSelect = (questionId, optionId) => {
+    const existingAnswerIndex = quizAnswers.findIndex(a => a.questionId === questionId);
+    const newAnswers = [...quizAnswers];
+    
+    if (existingAnswerIndex >= 0) {
+      newAnswers[existingAnswerIndex].selectedOptionId = optionId;
+    } else {
+      newAnswers.push({ questionId, selectedOptionId: optionId });
+    }
+    setQuizAnswers(newAnswers);
+  };
+
+  const handleSubmitQuiz = async () => {
+    if (!quizData) return;
+    
+    if (quizAnswers.length < quizData.questions.length) {
+      return toast.error("Please answer all questions before submitting.");
+    }
+
+    setIsSubmittingQuiz(true);
+    try {
+      const { data } = await api.post(`/quizzes/${quizData._id}/submit`, {
+        answers: quizAnswers
+      });
+      
+      setQuizResult(data);
+      if (data.passed) {
+        setQuizPassed(true);
+        toast.success(`Quiz passed! You scored ${data.percentage}%`);
+      } else {
+        toast.error(`You scored ${data.percentage}%. You need ${quizData.passingScore}% to pass. Try again!`);
+      }
+    } catch (error) {
+      toast.error("Failed to submit quiz.");
+    } finally {
+      setIsSubmittingQuiz(false);
+    }
   };
 
   if (loading) return <div className="h-screen w-screen"><Spinner size="xl" /></div>;
@@ -180,7 +246,8 @@ const CoursePlayer = () => {
                         {lIdx + 1}. {lesson.title}
                       </p>
                       <div className="flex items-center text-xs text-gray-500 mt-1">
-                        <PlayCircle className="h-3 w-3 mr-1" /> {lesson.duration} min
+                        {lesson.type === 'quiz' ? <Award className="h-3 w-3 mr-1" /> : <PlayCircle className="h-3 w-3 mr-1" />}
+                        {lesson.type === 'quiz' ? 'Quiz Module' : `${lesson.duration} min`}
                       </div>
                     </div>
                   </button>
@@ -215,24 +282,108 @@ const CoursePlayer = () => {
         <main className="flex-1 overflow-y-auto bg-gray-50">
           {activeLesson ? (
             <div className="max-w-4xl mx-auto py-6 px-4 sm:px-6">
-              {/* Video Player Placeholder / Iframe */}
-              <div className="bg-black aspect-video rounded-lg shadow-lg overflow-hidden flex items-center justify-center relative mb-6">
-                {activeLesson.videoUrl ? (
-                  <video 
-                    className="w-full h-full object-contain"
-                    controls
-                    src={activeLesson.videoUrl}
-                    poster={course.thumbnail}
-                  >
-                    Your browser does not support HTML video.
-                  </video>
-                ) : (
-                  <div className="text-white text-center p-8">
-                    <PlayCircle className="h-16 w-16 text-gray-600 mx-auto mb-4" />
-                    <p className="text-gray-400">No video available for this lesson.</p>
+              
+              {/* CONDITIONAL RENDER: QUIZ OR VIDEO */}
+              {activeLesson.type === 'quiz' ? (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-6">
+                  <div className="flex items-center gap-3 mb-6 border-b pb-4">
+                    <Award className="h-8 w-8 text-blue-600" />
+                    <h2 className="text-2xl font-bold text-gray-900">Quiz: {activeLesson.title}</h2>
                   </div>
-                )}
-              </div>
+                  
+                  {loadingQuiz ? (
+                    <div className="py-8"><Spinner size="md" /></div>
+                  ) : !quizData ? (
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
+                      This quiz does not have any questions yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-8">
+                      <div className="flex justify-between items-center bg-blue-50 p-4 rounded border border-blue-100">
+                        <span className="text-blue-800 font-medium">Passing Score Required: {quizData.passingScore}%</span>
+                        {quizResult && (
+                          <span className={`font-bold ${quizResult.passed ? 'text-green-600' : 'text-red-600'}`}>
+                            Your Score: {quizResult.percentage}%
+                          </span>
+                        )}
+                      </div>
+
+                      {quizData.questions.map((question, qIdx) => (
+                        <div key={question._id} className="p-5 border border-gray-200 rounded-lg shadow-sm">
+                          <h3 className="font-semibold text-gray-900 mb-4">{qIdx + 1}. {question.questionText} <span className="text-sm text-gray-400 font-normal">({question.points} pts)</span></h3>
+                          
+                          <div className="space-y-3 pl-2">
+                            {question.options.map((option) => {
+                              const isSelected = quizAnswers.find(a => a.questionId === question._id)?.selectedOptionId === option._id;
+                              
+                              return (
+                                <label 
+                                  key={option._id} 
+                                  className={`flex items-center p-3 border rounded-md cursor-pointer transition-colors ${
+                                    isSelected ? 'bg-blue-50 border-blue-400' : 'border-gray-200 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <input 
+                                    type="radio" 
+                                    name={`question-${question._id}`}
+                                    checked={isSelected}
+                                    onChange={() => handleOptionSelect(question._id, option._id)}
+                                    disabled={quizResult?.passed} // Disable inputs if they already passed
+                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mr-3"
+                                  />
+                                  <span className="text-gray-700">{option.text}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+
+                      {!quizPassed && (
+                        <button 
+                          className="btn-primary w-full sm:w-auto px-8"
+                          onClick={handleSubmitQuiz}
+                          disabled={isSubmittingQuiz}
+                        >
+                          {isSubmittingQuiz ? 'Grading...' : 'Submit Answers'}
+                        </button>
+                      )}
+
+                      {quizResult && !quizResult.passed && (
+                        <div className="p-4 bg-red-50 border border-red-200 rounded text-red-800 flex items-center justify-between">
+                          <span>You didn't pass this time. Review the material and try again.</span>
+                          <button onClick={() => { setQuizResult(null); setQuizAnswers([]); }} className="text-red-600 font-bold hover:underline">Retake Quiz</button>
+                        </div>
+                      )}
+                      
+                      {quizPassed && (
+                        <div className="p-4 bg-green-50 border border-green-200 rounded text-green-800">
+                          <strong>Excellent!</strong> You passed the quiz. You may now mark this module as complete below.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* VIDEO PLAYER (Default) */
+                <div className="bg-black aspect-video rounded-lg shadow-lg overflow-hidden flex items-center justify-center relative mb-6">
+                  {activeLesson.videoUrl ? (
+                    <video 
+                      className="w-full h-full object-contain"
+                      controls
+                      src={activeLesson.videoUrl}
+                      poster={course.thumbnail}
+                    >
+                      Your browser does not support HTML video.
+                    </video>
+                  ) : (
+                    <div className="text-white text-center p-8">
+                      <PlayCircle className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-400">No video available for this lesson.</p>
+                    </div>
+                  )}
+                </div>
+              )}
               
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div className="flex justify-between items-start flex-wrap gap-4 mb-6 border-b border-gray-100 pb-4">
@@ -242,7 +393,7 @@ const CoursePlayer = () => {
                   
                   <button
                     onClick={handleMarkComplete}
-                    disabled={completing || isCompleted(activeLesson._id)}
+                    disabled={completing || isCompleted(activeLesson._id) || (activeLesson.type === 'quiz' && !quizPassed)}
                     className={`btn ${isCompleted(activeLesson._id) ? 'bg-green-100 text-green-800 border border-green-200' : 'btn-primary'}`}
                   >
                     {completing ? 'Updating...' : isCompleted(activeLesson._id) ? (

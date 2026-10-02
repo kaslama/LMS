@@ -22,6 +22,13 @@ const EditCourse = () => {
   const [sections, setSections] = useState([]);
   const [status, setStatus] = useState('draft');
 
+  // --- QUIZ MODAL STATE ---
+  const [showQuizModal, setShowQuizModal] = useState(false);
+  const [selectedQuizLesson, setSelectedQuizLesson] = useState(null);
+  const [quizQuestions, setQuizQuestions] = useState([]);
+  const [passingScore, setPassingScore] = useState(70);
+  const [isSavingQuiz, setIsSavingQuiz] = useState(false);
+
   useEffect(() => {
     const fetchCourse = async () => {
       try {
@@ -93,6 +100,20 @@ const EditCourse = () => {
     setSections(updated);
   };
 
+  // NEW: Function to add a Quiz type lesson
+  const handleAddQuiz = (sectionIndex) => {
+    const updated = [...sections];
+    updated[sectionIndex].lessons.push({
+      title: 'New Quiz',
+      videoUrl: '', // Quizzes don't have videos
+      description: 'Answer the following questions to test your knowledge.',
+      duration: 0,
+      order: updated[sectionIndex].lessons.length + 1,
+      type: 'quiz' // Explicitly set type to quiz
+    });
+    setSections(updated);
+  };
+
   const handleDeleteLesson = (sectionIndex, lessonIndex) => {
     const updated = [...sections];
     updated[sectionIndex].lessons.splice(lessonIndex, 1);
@@ -129,6 +150,65 @@ const EditCourse = () => {
     } catch (error) {
       toast.error('Failed to update course status');
     }
+  };
+
+  // --- QUIZ MANAGEMENT LOGIC ---
+  const openQuizModal = async (lesson) => {
+    setSelectedQuizLesson(lesson);
+    setShowQuizModal(true);
+    try {
+      // Try to fetch existing quiz
+      const { data } = await api.get(`/quizzes/lesson/${lesson._id}`);
+      setQuizQuestions(data.questions || []);
+      setPassingScore(data.passingScore || 70);
+    } catch (error) {
+      // If no quiz exists yet, start with one empty question
+      setQuizQuestions([{ 
+        questionText: '', 
+        points: 1, 
+        options: [{ text: '', isCorrect: true }, { text: '', isCorrect: false }] 
+      }]);
+      setPassingScore(70);
+    }
+  };
+
+  const saveQuizQuestions = async () => {
+    setIsSavingQuiz(true);
+    try {
+      await api.post('/quizzes', {
+        courseId: id,
+        lessonId: selectedQuizLesson._id,
+        title: selectedQuizLesson.title,
+        questions: quizQuestions,
+        passingScore
+      });
+      toast.success('Quiz questions saved successfully!');
+      setShowQuizModal(false);
+    } catch (error) {
+      toast.error('Failed to save quiz questions');
+    } finally {
+      setIsSavingQuiz(false);
+    }
+  };
+
+  const updateQuestion = (qIndex, field, value) => {
+    const updated = [...quizQuestions];
+    updated[qIndex][field] = value;
+    setQuizQuestions(updated);
+  };
+
+  const updateOption = (qIndex, oIndex, value) => {
+    const updated = [...quizQuestions];
+    updated[qIndex].options[oIndex].text = value;
+    setQuizQuestions(updated);
+  };
+
+  const setCorrectOption = (qIndex, correctOptionIndex) => {
+    const updated = [...quizQuestions];
+    updated[qIndex].options.forEach((opt, idx) => {
+      opt.isCorrect = (idx === correctOptionIndex);
+    });
+    setQuizQuestions(updated);
   };
 
   if (isLoading) {
@@ -282,43 +362,80 @@ const EditCourse = () => {
                     </div>
 
                     <div className="space-y-3 pl-4 border-l-2 border-blue-200 ml-2">
+                      {/* UPDATED LESSON RENDERING LOGIC */}
                       {section.lessons.map((lesson, lIndex) => (
                         <div key={lIndex} className="bg-white border border-gray-200 rounded-md p-4 flex flex-col gap-3 shadow-sm">
                           <div className="flex justify-between items-center">
-                            <input
-                              type="text"
-                              value={lesson.title}
-                              onChange={(e) => handleLessonChange(e.target.value, sIndex, lIndex, 'title')}
-                              className="font-medium text-gray-900 border border-gray-300 rounded px-3 py-1.5 w-1/2 focus:border-blue-500"
-                              placeholder="Lesson Title"
-                            />
+                            <div className="flex items-center gap-2 w-1/2">
+                              {/* Show a different badge based on type */}
+                              <span className={`text-xs font-bold px-2 py-1 rounded-md ${lesson.type === 'quiz' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                {lesson.type === 'quiz' ? 'QUIZ' : 'VIDEO'}
+                              </span>
+                              <input
+                                type="text"
+                                value={lesson.title}
+                                onChange={(e) => handleLessonChange(e.target.value, sIndex, lIndex, 'title')}
+                                className="font-medium text-gray-900 border border-gray-300 rounded px-3 py-1.5 w-full focus:border-blue-500"
+                                placeholder="Lesson Title"
+                              />
+                            </div>
                             <button onClick={() => handleDeleteLesson(sIndex, lIndex)} className="text-red-400 text-xs font-medium hover:underline">
-                              Remove Lesson
+                              Remove {lesson.type === 'quiz' ? 'Quiz' : 'Lesson'}
                             </button>
                           </div>
                           
-                          <input
-                            type="text"
-                            value={lesson.videoUrl}
-                            onChange={(e) => handleLessonChange(e.target.value, sIndex, lIndex, 'videoUrl')}
-                            className="text-sm text-gray-600 border border-gray-300 rounded px-3 py-1.5 w-full focus:border-blue-500"
-                            placeholder="Video URL (e.g., https://www.w3schools.com/html/mov_bbb.mp4)"
-                          />
+                          {/* ONLY show Video URL if it is NOT a quiz */}
+                          {lesson.type !== 'quiz' && (
+                            <input
+                              type="text"
+                              value={lesson.videoUrl}
+                              onChange={(e) => handleLessonChange(e.target.value, sIndex, lIndex, 'videoUrl')}
+                              className="text-sm text-gray-600 border border-gray-300 rounded px-3 py-1.5 w-full focus:border-blue-500"
+                              placeholder="Video URL (e.g., https://www.w3schools.com/html/mov_bbb.mp4)"
+                            />
+                          )}
                           
-                          {/* New Lesson Description Field */}
                           <textarea
                             rows={2}
                             value={lesson.description || ''}
                             onChange={(e) => handleLessonChange(e.target.value, sIndex, lIndex, 'description')}
                             className="text-sm text-gray-600 border border-gray-300 rounded px-3 py-1.5 w-full focus:border-blue-500"
-                            placeholder="Lesson Description (What will students learn in this video?)"
+                            placeholder={lesson.type === 'quiz' ? "Quiz Description / Instructions" : "Lesson Description (What will students learn in this video?)"}
                           />
+
+                          {/* QUIZ BUILDER MESSAGE / BUTTON */}
+                          {lesson.type === 'quiz' && (
+                            <div className="bg-purple-50 p-4 rounded border border-purple-100 flex flex-col items-start gap-2">
+                              {lesson._id ? (
+                                <>
+                                  <p className="text-sm text-purple-800 mb-1">Curriculum saved! You can now add questions and options.</p>
+                                  <button 
+                                    type="button"
+                                    onClick={() => openQuizModal(lesson)} 
+                                    className="px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-md hover:bg-purple-700 shadow-sm"
+                                  >
+                                    Manage Quiz Questions & Options
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-sm text-purple-800">
+                                  <strong>Note:</strong> To add actual questions to this quiz, you must click the blue <strong>"Save Curriculum"</strong> button first.
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                       
-                      <button onClick={() => handleAddLesson(sIndex)} className="inline-block mt-2 text-sm text-blue-600 font-semibold hover:text-blue-800 transition-colors">
-                        + Add New Lesson
-                      </button>
+                      {/* UPDATED DUAL BUTTON LAYOUT */}
+                      <div className="flex gap-6 mt-2">
+                        <button onClick={() => handleAddLesson(sIndex)} className="inline-block text-sm text-blue-600 font-semibold hover:text-blue-800 transition-colors">
+                          + Add Video Lesson
+                        </button>
+                        <button onClick={() => handleAddQuiz(sIndex)} className="inline-block text-sm text-purple-600 font-semibold hover:text-purple-800 transition-colors">
+                          + Add Quiz Module
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -333,6 +450,112 @@ const EditCourse = () => {
           )}
         </div>
       </div>
+
+      {/* QUIZ MANAGER MODAL */}
+      {showQuizModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-6 border-b pb-4">
+              <h2 className="text-2xl font-bold text-gray-900">Manage Questions: {selectedQuizLesson?.title}</h2>
+              <button onClick={() => setShowQuizModal(false)} className="text-gray-500 hover:text-red-500 font-bold text-xl">&times;</button>
+            </div>
+
+            <div className="mb-6 flex items-center gap-4">
+              <label className="font-semibold text-gray-700">Passing Score (%):</label>
+              <input 
+                type="number" min="0" max="100" 
+                value={passingScore} onChange={(e) => setPassingScore(e.target.value)}
+                className="border border-gray-300 rounded px-3 py-1.5 w-24 focus:border-purple-500"
+              />
+            </div>
+
+            <div className="space-y-8">
+              {quizQuestions.map((q, qIndex) => (
+                <div key={qIndex} className="p-5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
+                  <div className="flex justify-between mb-4">
+                    <h3 className="font-bold text-gray-800">Question {qIndex + 1}</h3>
+                    <button 
+                      onClick={() => setQuizQuestions(quizQuestions.filter((_, i) => i !== qIndex))}
+                      className="text-red-500 text-sm hover:underline"
+                    >
+                      Remove Question
+                    </button>
+                  </div>
+                  
+                  <input
+                    type="text"
+                    value={q.questionText}
+                    onChange={(e) => updateQuestion(qIndex, 'questionText', e.target.value)}
+                    placeholder="Enter your question here..."
+                    className="w-full border border-gray-300 rounded px-4 py-2 mb-4 focus:border-purple-500"
+                  />
+
+                  <div className="pl-4 border-l-2 border-purple-300 space-y-3">
+                    <p className="text-sm font-semibold text-gray-600 mb-2">Options (Select the correct one):</p>
+                    {q.options.map((opt, oIndex) => (
+                      <div key={oIndex} className="flex items-center gap-3">
+                        <input 
+                          type="radio" 
+                          name={`correct-${qIndex}`} 
+                          checked={opt.isCorrect}
+                          onChange={() => setCorrectOption(qIndex, oIndex)}
+                          className="h-5 w-5 text-purple-600"
+                        />
+                        <input
+                          type="text"
+                          value={opt.text}
+                          onChange={(e) => updateOption(qIndex, oIndex, e.target.value)}
+                          placeholder={`Option ${oIndex + 1}`}
+                          className={`flex-1 border rounded px-3 py-1.5 focus:border-purple-500 ${opt.isCorrect ? 'bg-purple-50 border-purple-300 font-medium' : 'border-gray-300'}`}
+                        />
+                        <button 
+                          onClick={() => {
+                            const updated = [...quizQuestions];
+                            updated[qIndex].options = updated[qIndex].options.filter((_, i) => i !== oIndex);
+                            setQuizQuestions(updated);
+                          }}
+                          className="text-red-400 text-sm hover:text-red-600"
+                        >&times;</button>
+                      </div>
+                    ))}
+                    
+                    <button 
+                      onClick={() => {
+                        const updated = [...quizQuestions];
+                        updated[qIndex].options.push({ text: '', isCorrect: false });
+                        setQuizQuestions(updated);
+                      }}
+                      className="text-sm text-purple-600 font-semibold hover:underline mt-2 inline-block"
+                    >
+                      + Add Option
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 flex justify-between items-center border-t pt-6">
+              <button 
+                onClick={() => setQuizQuestions([...quizQuestions, { questionText: '', points: 1, options: [{ text: '', isCorrect: true }, { text: '', isCorrect: false }] }])}
+                className="px-4 py-2 bg-gray-200 text-gray-800 font-semibold rounded hover:bg-gray-300 transition-colors"
+              >
+                + Add Another Question
+              </button>
+              
+              <div className="flex gap-3">
+                <button onClick={() => setShowQuizModal(false)} className="px-6 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button 
+                  onClick={saveQuizQuestions} 
+                  disabled={isSavingQuiz}
+                  className="px-6 py-2 bg-purple-600 text-white font-semibold rounded hover:bg-purple-700 shadow disabled:opacity-70"
+                >
+                  {isSavingQuiz ? 'Saving...' : 'Save All Questions'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

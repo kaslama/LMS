@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import connectDB from './config/db.js';
 
 // Route Imports
+import quizRoutes from './routes/quizRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import courseRoutes from './routes/courseRoutes.js';
@@ -41,6 +42,7 @@ app.use('/api/enrollments', enrollmentRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/quizzes', quizRoutes);
 
 // Root route
 app.get('/', (req, res) => {
