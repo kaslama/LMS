@@ -61,12 +61,24 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      // Tells the backend to clear the HTTP-only cookie
       await api.post('/auth/logout');
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
+      // 1. Clear React state
       setUser(null);
+      
+      // 2. Wipe Local Storage completely
       localStorage.removeItem('userInfo');
+      localStorage.removeItem('token'); 
+      
+      // 3. Clear Axios headers so the next user doesn't accidentally use the old token
+      if (api.defaults.headers) {
+        delete api.defaults.headers.common['Authorization'];
+      }
+      
+      // 4. Hard redirect to flush React's memory
       window.location.href = '/login';
     }
   };

@@ -18,6 +18,7 @@ import CourseDetails from './pages/public/CourseDetails';
 import StudentDashboard from './pages/student/StudentDashboard';
 import MyLearning from './pages/student/MyLearning';
 import CoursePlayer from './pages/student/CoursePlayer';
+import Certificate from './pages/student/Certificate';
 
 // Instructor Pages
 import InstructorDashboard from './pages/instructor/InstructorDashboard';
@@ -62,6 +63,7 @@ const App = () => {
           <Route element={<ProtectedRoute allowedRoles={['student', 'admin']} />}>
             <Route path="/student/dashboard" element={<StudentDashboard />} />
             <Route path="/student/learning" element={<MyLearning />} />
+            <Route path="/student/certificate/:courseId" element={<Certificate />} />
           </Route>
 
           {/* Protected Instructor Routes */}

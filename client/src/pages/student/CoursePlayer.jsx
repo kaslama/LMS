@@ -19,10 +19,18 @@ const CoursePlayer = () => {
   // --- QUIZ STATE ---
   const [quizPassed, setQuizPassed] = useState(false);
   const [quizData, setQuizData] = useState(null);
-  const [quizAnswers, setQuizAnswers] = useState([]); // Array of { questionId, selectedOptionId }
+  const [quizAnswers, setQuizAnswers] = useState([]); 
   const [quizResult, setQuizResult] = useState(null);
   const [isSubmittingQuiz, setIsSubmittingQuiz] = useState(false);
   const [loadingQuiz, setLoadingQuiz] = useState(false);
+
+  // Helper function to extract YouTube ID and convert to embed URL
+  const getYouTubeEmbedUrl = (url) => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
+  };
 
   // Reset quiz state whenever the active lesson changes
   useEffect(() => {
@@ -273,8 +281,16 @@ const CoursePlayer = () => {
           </div>
           
           {enrollment.isCompleted && (
-            <div className="flex items-center gap-2 text-sm font-medium text-green-600 bg-green-50 px-3 py-1.5 rounded-full border border-green-200">
-              <Award className="h-4 w-4" /> Course Completed
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-green-600 bg-green-50 px-3 py-1.5 rounded-full border border-green-200">
+                <Award className="h-4 w-4" /> Course Completed
+              </div>
+              <Link 
+                to={`/student/certificate/${courseId}`} 
+                className="flex items-center gap-2 text-sm font-semibold text-white bg-blue-600 px-4 py-2 rounded-md hover:bg-blue-700 transition-colors shadow-sm"
+              >
+                <Award className="h-4 w-4" /> View Certificate
+              </Link>
             </div>
           )}
         </header>
@@ -368,14 +384,26 @@ const CoursePlayer = () => {
                 /* VIDEO PLAYER (Default) */
                 <div className="bg-black aspect-video rounded-lg shadow-lg overflow-hidden flex items-center justify-center relative mb-6">
                   {activeLesson.videoUrl ? (
-                    <video 
-                      className="w-full h-full object-contain"
-                      controls
-                      src={activeLesson.videoUrl}
-                      poster={course.thumbnail}
-                    >
-                      Your browser does not support HTML video.
-                    </video>
+                    getYouTubeEmbedUrl(activeLesson.videoUrl) ? (
+                      /* Render YouTube iFrame */
+                      <iframe
+                        className="w-full h-full object-cover"
+                        src={getYouTubeEmbedUrl(activeLesson.videoUrl)}
+                        title={activeLesson.title}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      ></iframe>
+                    ) : (
+                      /* Render Standard HTML5 Video for .mp4 files */
+                      <video 
+                        className="w-full h-full object-contain"
+                        controls
+                        src={activeLesson.videoUrl}
+                        poster={course.thumbnail}
+                      >
+                        Your browser does not support HTML video.
+                      </video>
+                    )
                   ) : (
                     <div className="text-white text-center p-8">
                       <PlayCircle className="h-16 w-16 text-gray-600 mx-auto mb-4" />

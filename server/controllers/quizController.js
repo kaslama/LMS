@@ -9,7 +9,6 @@ export const createQuiz = asyncHandler(async (req, res) => {
   const { courseId, lessonId, title, questions, passingScore } = req.body;
 
   // Verify the course belongs to the instructor (add your auth logic here)
-
   const quiz = await Quiz.create({
     course: courseId,
     lesson: lessonId,
@@ -75,4 +74,25 @@ export const submitQuiz = asyncHandler(async (req, res) => {
   const passed = percentage >= quiz.passingScore;
 
   res.json({ score, totalPoints, percentage, passed });
+});
+
+// @desc    Update an existing quiz
+// @route   PUT /api/quizzes/:id
+// @access  Private/Instructor
+export const updateQuiz = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { title, questions, passingScore } = req.body;
+
+  const updatedQuiz = await Quiz.findByIdAndUpdate(
+    id,
+    { title, questions, passingScore },
+    { new: true, runValidators: true } // Returns the updated document
+  );
+
+  if (!updatedQuiz) {
+    res.status(404);
+    throw new Error("Quiz not found");
+  }
+
+  res.status(200).json(updatedQuiz);
 });
